@@ -9,27 +9,21 @@ export default async function HomePage() {
 
       {/* ── Hero card ──────────────────────────────────────────── */}
       <section className="px-4 sm:px-6 lg:px-10 pt-6 pb-10">
-        <div style={{ maxWidth: 1100, margin: "0 auto" }}>
+        <div className="hero-enter" style={{ maxWidth: 1100, margin: "0 auto" }}>
           <div
-            className="relative overflow-hidden flex items-end"
+            className="hero-card relative overflow-hidden flex items-end"
             style={{ backgroundColor: "#1c2741", borderRadius: "2rem", minHeight: 390, boxShadow: "0 32px 80px rgba(0,0,0,0.30), 0 10px 28px rgba(0,0,0,0.16)" }}
           >
-            {/* Building photo area */}
-            <div
-              className="hero-drop absolute right-0 top-0 bottom-0"
-              style={{ width: "58%" }}
-            >
+            {/* Building photo area — full width */}
+            <div className="absolute inset-0">
               <img
-                src={unsplashUrl(HERO_PHOTO, 1200, 800)}
+                src={unsplashUrl(HERO_PHOTO, 1600, 800)}
                 alt="Modern apartment building"
                 className="absolute inset-0 w-full h-full object-cover"
               />
               <div
                 className="absolute inset-0"
-                style={{
-                  background:
-                    "linear-gradient(to right, #1c2741 0%, rgba(28,39,65,0.65) 25%, transparent 65%)",
-                }}
+                style={{ backgroundColor: "rgba(20,28,48,0.40)" }}
               />
             </div>
 

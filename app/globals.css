@@ -113,15 +113,17 @@ html {
   animation: shimmer 1.5s infinite;
 }
 
-/* Hero image hover zoom */
-.hero-drop img {
-  transition: transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+/* Hero card hover — the whole block lifts as one unit */
+.hero-card {
+  transition: transform 0.45s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.45s cubic-bezier(0.22, 1, 0.36, 1);
 }
-.hero-drop:hover img {
-  transform: scale(1.05);
+.hero-card:hover {
+  transform: translateY(-8px);
+  box-shadow: 0 44px 100px rgba(0, 0, 0, 0.36), 0 16px 36px rgba(0, 0, 0, 0.20);
 }
 
-/* Hero image drop-from-top (page load) */
+/* Hero block drop-from-top (page load) — animates the whole card as one unit */
 @keyframes dropFromTop {
   from {
     opacity: 0;
@@ -135,7 +137,7 @@ html {
   }
 }
 
-.hero-drop {
+.hero-enter {
   animation: dropFromTop 2s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
