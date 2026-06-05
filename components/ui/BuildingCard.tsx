@@ -2,6 +2,7 @@ import Link from "next/link";
 import { MapPin, ChevronRight, Dumbbell, Waves, Sunset, Car, ConciergeBell, Warehouse, Bike, WashingMachine, HardHat } from "lucide-react";
 import { Building } from "@/lib/types";
 import Badge from "./Badge";
+import { unsplashUrl, buildingFallbackPhoto } from "@/lib/unsplash";
 
 const amenityIcons: Record<string, React.ReactNode> = {
   gym: <Dumbbell className="w-3.5 h-3.5" />,
@@ -22,7 +23,7 @@ export default function BuildingCard({ building }: BuildingCardProps) {
   const displayAmenities = building.amenities.slice(0, 5);
 
   const formatPrice = (n: number) =>
-    n ? `$${n.toLocaleString()}` : "—";
+    n ? `$${n.toLocaleString()}` : "";
 
   const firstImage = building.images?.[0];
 
@@ -40,13 +41,11 @@ export default function BuildingCard({ building }: BuildingCardProps) {
             className="w-full h-full object-cover"
           />
         ) : (
-          <div className="w-full h-full flex items-center justify-center">
-            <div className="text-gray-300 text-center">
-              <div className="w-12 h-12 mx-auto mb-2 bg-gray-200 rounded-2xl flex items-center justify-center">
-                <MapPin className="w-6 h-6 text-gray-400" />
-              </div>
-            </div>
-          </div>
+          <img
+            src={unsplashUrl(buildingFallbackPhoto(building.id), 800, 416)}
+            alt={building.name}
+            className="w-full h-full object-cover"
+          />
         )}
         <div className="absolute top-3 left-3 flex gap-2">
           <Badge label={building.neighbourhood} variant="blue" />

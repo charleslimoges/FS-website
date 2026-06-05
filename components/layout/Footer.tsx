@@ -17,7 +17,7 @@ export default function Footer() {
               </span>
             </Link>
             <p className="text-gray-400 text-sm leading-relaxed">
-              Your dedicated leasing agent in Montreal. We help you find the perfect rental home — from cozy studios to spacious family apartments.
+              Your dedicated leasing agent in Montreal. We help you find the perfect rental home, from cozy studios to spacious family apartments.
             </p>
             <div className="flex items-center gap-3 mt-6">
               <a
@@ -105,19 +105,19 @@ export default function Footer() {
               <li className="flex items-center gap-3">
                 <Phone className="w-4 h-4 text-blue-300 shrink-0" />
                 <a
-                  href="tel:+15141234567"
+                  href="tel:+14505430876"
                   className="text-gray-400 text-sm hover:text-white transition-colors"
                 >
-                  (514) 123-4567
+                  450-543-0876
                 </a>
               </li>
               <li className="flex items-center gap-3">
                 <Mail className="w-4 h-4 text-blue-300 shrink-0" />
                 <a
-                  href="mailto:hello@yourkeymtl.com"
+                  href="mailto:charles@firststays.com"
                   className="text-gray-400 text-sm hover:text-white transition-colors"
                 >
-                  hello@yourkeymtl.com
+                  charles@firststays.com
                 </a>
               </li>
             </ul>
@@ -129,7 +129,7 @@ export default function Footer() {
             © {new Date().getFullYear()} YourKeyMTL. All rights reserved.
           </p>
           <p className="text-gray-500 text-sm">
-            Licensed Real Estate Leasing Agent — Québec
+            Licensed Real Estate Leasing Agent · Québec
           </p>
         </div>
       </div>

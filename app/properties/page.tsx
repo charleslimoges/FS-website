@@ -216,7 +216,7 @@ function UnitFilterSidebar({
             onChange={(e) => setDraft((f) => ({ ...f, min_price: e.target.value.replace(/\D/g, "") }))}
             className="flex-1 min-w-0 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
           />
-          <span className="text-gray-300 text-xs shrink-0">—</span>
+          <span className="text-gray-300 text-xs shrink-0">to</span>
           <input
             type="text"
             inputMode="numeric"

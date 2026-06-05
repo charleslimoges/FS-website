@@ -6,8 +6,8 @@
       "address": "312 70e Avenue (Clara)",
       "neighbourhood": "Downtown",
       "images": [],
-      "min_price": 0,
-      "max_price": 0,
+      "min_price": 1250,
+      "max_price": 2000,
       "amenities": [
         "Co-working Space",
         "Yoga",

@@ -2,6 +2,60 @@
 @tailwind components;
 @tailwind utilities;
 
+@font-face {
+  font-family: "The Seasons";
+  src: url("/fonts/TheSeasons-Lt.woff2") format("woff2"),
+       url("/fonts/TheSeasons-Lt.woff") format("woff");
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "The Seasons";
+  src: url("/fonts/TheSeasons-LtIt.woff2") format("woff2"),
+       url("/fonts/TheSeasons-LtIt.woff") format("woff");
+  font-weight: 300;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "The Seasons";
+  src: url("/fonts/TheSeasons-Reg.woff2") format("woff2"),
+       url("/fonts/TheSeasons-Reg.woff") format("woff");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "The Seasons";
+  src: url("/fonts/TheSeasons-It.woff2") format("woff2"),
+       url("/fonts/TheSeasons-It.woff") format("woff");
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "The Seasons";
+  src: url("/fonts/TheSeasons-Bd.woff2") format("woff2"),
+       url("/fonts/TheSeasons-Bd.woff") format("woff");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "The Seasons";
+  src: url("/fonts/TheSeasons-BdIt.woff2") format("woff2"),
+       url("/fonts/TheSeasons-BdIt.woff") format("woff");
+  font-weight: 700;
+  font-style: italic;
+  font-display: swap;
+}
+
 :root {
   --background: #ffffff;
   --foreground: #0a0e21;
@@ -13,6 +67,10 @@
 
 * {
   box-sizing: border-box;
+}
+
+html {
+  overflow-x: hidden;
 }
 
 body {
@@ -53,6 +111,32 @@ html {
   background: linear-gradient(90deg, #f5f6fa 25%, #e8eaf0 50%, #f5f6fa 75%);
   background-size: 1000px 100%;
   animation: shimmer 1.5s infinite;
+}
+
+/* Hero image hover zoom */
+.hero-drop img {
+  transition: transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.hero-drop:hover img {
+  transform: scale(1.05);
+}
+
+/* Hero image drop-from-top (page load) */
+@keyframes dropFromTop {
+  from {
+    opacity: 0;
+    transform: translateY(-55px);
+    filter: brightness(0.2);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: brightness(1);
+  }
+}
+
+.hero-drop {
+  animation: dropFromTop 2s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 /* Chat panel slide-up */

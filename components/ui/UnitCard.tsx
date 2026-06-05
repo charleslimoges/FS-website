@@ -119,7 +119,7 @@ export default function UnitCard({ unit, onViewDetails }: UnitCardProps) {
         <div className="mt-auto">
           {isConstruction ? (
             <div className="w-full flex items-center justify-center gap-2 py-2 rounded-xl bg-orange-50 border border-orange-200 text-orange-700 text-sm font-medium">
-              <HardHat className="w-4 h-4" /> In Construction — Contact Us
+              <HardHat className="w-4 h-4" /> In Construction · Contact Us
             </div>
           ) : unit.available_date ? (
             <p className="text-xs text-gray-400">

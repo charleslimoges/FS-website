@@ -29,6 +29,7 @@ const config: Config = {
       },
       fontFamily: {
         outfit: ["Outfit", "sans-serif"],
+        seasons: ['"The Seasons"', "serif"],
       },
       borderRadius: {
         "2xl": "16px",

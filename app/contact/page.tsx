@@ -48,7 +48,7 @@ export default function ContactPage() {
             Let&apos;s find your next home
           </h1>
           <p className="text-gray-500 max-w-xl mx-auto">
-            Have a question or ready to start your search? Fill out the form below or reach out directly — we typically respond within a few hours.
+            Have a question or ready to start your search? Fill out the form below or reach out directly. We typically respond within a few hours.
           </p>
         </div>
       </div>
@@ -128,7 +128,7 @@ export default function ContactPage() {
                     value={form.message}
                     onChange={(e) => setForm({ ...form, message: e.target.value })}
                     rows={5}
-                    placeholder="Tell us what you're looking for — budget, preferred neighbourhoods, move-in date, any requirements..."
+                    placeholder="Tell us what you're looking for: budget, preferred neighbourhoods, move-in date, any requirements..."
                     className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue focus:border-transparent resize-none"
                   />
                 </div>

@@ -112,7 +112,7 @@ function generateDescription(
   if (amenityList.length > 0) {
     text += `\n\nResidents enjoy access to premium amenities including ${amenityList.join(", ")}.`;
   }
-  text += `\n\nNestled in ${neighbourhood || "a vibrant neighbourhood"}, you'll be steps away from local cafés, restaurants, boutiques, parks, and public transit — everything you need for a connected and comfortable lifestyle.`;
+  text += `\n\nNestled in ${neighbourhood || "a vibrant neighbourhood"}, you'll be steps away from local cafés, restaurants, boutiques, parks, and public transit. Everything you need for a connected and comfortable lifestyle.`;
   text += `\n\nContact us to schedule a private tour and discover your next home.`;
   return text;
 }
@@ -568,7 +568,7 @@ function BuildingsAdmin() {
                           className="w-4 h-4 rounded border-gray-300 text-brand-blue"
                         />
                         <span className="text-sm text-gray-700 flex-1">
-                          Unit {unit.unit_number} — {unit.bedrooms === 0 ? "Studio" : `${unit.bedrooms}bd`} · ${unit.price}/mo
+                          Unit {unit.unit_number} · {unit.bedrooms === 0 ? "Studio" : `${unit.bedrooms}bd`} · ${unit.price}/mo
                         </span>
                         {unit.status === "in_construction" && (
                           <span className="text-xs text-orange-600 flex items-center gap-1">

@@ -143,7 +143,7 @@ export default function ChatBot() {
                 <p className="text-white font-semibold text-sm">YourKeyMTL Assistant</p>
                 <div className="flex items-center gap-1.5">
                   <span className="w-2 h-2 bg-green-400 rounded-full" />
-                  <span className="text-white/60 text-xs">Online — typically replies instantly</span>
+                  <span className="text-white/60 text-xs">Online · typically replies instantly</span>
                 </div>
               </div>
             </div>
