@@ -57,15 +57,18 @@ function videoItems(media: unknown): MediaItem[] {
 // ─── Status mapping ──────────────────────────────────────────────────────────
 
 /**
- * Whether a unit may appear on the public site. All three must hold:
- *  - Apartment Status is Vacant, Occupied, Partner Application, or Future
- *    (not Rented/construction/model/empty)
- *  - Application Status is NOT "Signed"
- *  - Active is "Active" (building is live, not Inactive/construction)
+ * Extra public-visibility guard, applied on top of the admin Active status
+ * (RLS already restricts the anon client to published = active rows). This only
+ * exists to hide synced Airtable units that explicitly say they're unavailable:
+ *  - Apartment Status reads Rented/construction/model (not Vacant/Occupied/…)
+ *  - Application Status is "Signed"
+ *  - Active is set to something other than "Active" (e.g. Inactive)
+ * Empty/missing fields (e.g. manually-added units) defer to the admin's status.
  */
 export function isPublicUnit(row: Pick<UnitRow, "apartment_status" | "application_status" | "active">): boolean {
-  const apt = (row.apartment_status ?? "").toLowerCase();
+  const apt = (row.apartment_status ?? "").trim().toLowerCase();
   const okApt =
+    apt === "" ||
     apt.includes("vacant") ||
     apt.includes("occupied") ||
     apt.includes("partner application") ||
@@ -73,7 +76,8 @@ export function isPublicUnit(row: Pick<UnitRow, "apartment_status" | "applicatio
   const notSigned = !(row.application_status ?? []).some((s) =>
     s.toLowerCase().includes("signed")
   );
-  const isActive = (row.active ?? "").trim().toLowerCase() === "active";
+  const active = (row.active ?? "").trim().toLowerCase();
+  const isActive = active === "" || active === "active";
   return okApt && notSigned && isActive;
 }
 

@@ -1,3 +1,6 @@
+/** Lifecycle state of a listing (unit or building). `active` = visible online. */
+export type ListingStatus = "hidden" | "active" | "archived";
+
 export type Json =
   | string
   | number
@@ -33,6 +36,7 @@ export type Database = {
           partner_doc: string | null;
           pets: string[] | null;
           published: boolean;
+          status: ListingStatus;
           updated_at: string;
           utilities: string[] | null;
           videos: Json;
@@ -41,6 +45,7 @@ export type Database = {
           active_status?: string | null;
           airtable_id: string;
           overrides?: Json;
+          status?: ListingStatus;
           amenities?: string[] | null;
           created_at?: string;
           display_description?: string | null;
@@ -99,6 +104,7 @@ export type Database = {
           price: number | null;
           promo: number | null;
           published: boolean;
+          status: ListingStatus;
           sqft: number | null;
           unit_number: string | null;
           updated_at: string;
@@ -109,6 +115,7 @@ export type Database = {
           airtable_id: string;
           active?: string | null;
           overrides?: Json;
+          status?: ListingStatus;
           amenities?: string[] | null;
           apartment_status?: string | null;
           appliances?: string[] | null;
