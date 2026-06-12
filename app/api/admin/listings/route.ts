@@ -41,6 +41,7 @@ export async function GET(req: NextRequest) {
  * PATCH /api/admin/listings — update admin-owned fields.
  * Body: {
  *   type, airtable_id,
+ *   airtable_ids?: string[],                    // bulk status change for many rows
  *   status?: "hidden" | "active" | "archived", // lifecycle; `active` = live online
  *   published?,                                // legacy alias: true→active, false→hidden
  *   display_description?,                       // real admin column
@@ -53,19 +54,38 @@ export async function PATCH(req: NextRequest) {
     const {
       type,
       airtable_id,
+      airtable_ids,
       status,
       published,
       display_description,
       overrides,
       resetFields,
     } = await req.json();
-    if (!airtable_id) {
-      return NextResponse.json({ error: "airtable_id required" }, { status: 400 });
-    }
     const table = type === "buildings" ? "buildings" : "units";
     const allowed: readonly string[] =
       table === "buildings" ? EDITABLE_BUILDING_FIELDS : EDITABLE_UNIT_FIELDS;
     const supabase = getServiceClient();
+
+    // Bulk lifecycle change: { type, airtable_ids: [...], status }.
+    if (Array.isArray(airtable_ids)) {
+      if (airtable_ids.length === 0) {
+        return NextResponse.json({ error: "airtable_ids empty" }, { status: 400 });
+      }
+      if (typeof status !== "string" || !STATUSES.includes(status as ListingStatus)) {
+        return NextResponse.json({ error: "invalid status" }, { status: 400 });
+      }
+      const sp = statusPatch(status as ListingStatus);
+      const { error } =
+        table === "buildings"
+          ? await supabase.from("buildings").update(sp as never).in("airtable_id", airtable_ids)
+          : await supabase.from("units").update(sp as never).in("airtable_id", airtable_ids);
+      if (error) throw new Error(error.message);
+      return NextResponse.json({ ok: true, count: airtable_ids.length });
+    }
+
+    if (!airtable_id) {
+      return NextResponse.json({ error: "airtable_id required" }, { status: 400 });
+    }
 
     const patch: Record<string, unknown> = {};
     // Lifecycle change. Accept an explicit status, or fall back to the legacy
@@ -175,58 +195,40 @@ export async function POST(req: NextRequest) {
 }
 
 /**
- * DELETE /api/admin/listings — remove a unit or building from the website
+ * DELETE /api/admin/listings — permanently remove one or many archived listings
  * (Supabase only; Airtable is untouched). Deleting a building also removes its
  * units. Associated storage media is cleaned up.
- * Body: { type, airtable_id }
+ * Body: { type, airtable_id } or { type, airtable_ids: [...] }
  */
 export async function DELETE(req: NextRequest) {
   try {
-    const { type, airtable_id } = await req.json();
-    if (!airtable_id) {
-      return NextResponse.json({ error: "airtable_id required" }, { status: 400 });
+    const { type, airtable_id, airtable_ids } = await req.json();
+    const ids: string[] = Array.isArray(airtable_ids)
+      ? airtable_ids
+      : airtable_id
+      ? [airtable_id]
+      : [];
+    if (ids.length === 0) {
+      return NextResponse.json({ error: "airtable_id(s) required" }, { status: 400 });
     }
     const table = type === "buildings" ? "buildings" : "units";
     const supabase = getServiceClient();
 
-    // Permanent deletion is only allowed from the Archived state.
-    const { data: current } = await (table === "buildings"
-      ? supabase.from("buildings").select("status").eq("airtable_id", airtable_id)
-      : supabase.from("units").select("status").eq("airtable_id", airtable_id)
-    ).maybeSingle();
-    if (current && current.status !== "archived") {
+    // Permanent deletion is only allowed from the Archived state — verify all.
+    const { data: rows } = await (table === "buildings"
+      ? supabase.from("buildings").select("airtable_id,status").in("airtable_id", ids)
+      : supabase.from("units").select("airtable_id,status").in("airtable_id", ids));
+    if ((rows ?? []).some((r) => r.status !== "archived")) {
       return NextResponse.json(
-        { error: "Listing must be archived before it can be deleted." },
+        { error: "Listings must be archived before they can be deleted." },
         { status: 409 }
       );
     }
 
-    if (type === "buildings") {
-      // Remove child units first (FK), cleaning their media too.
-      const { data: childUnits } = await supabase
-        .from("units")
-        .select("airtable_id")
-        .eq("building_airtable_id", airtable_id);
-      for (const u of childUnits ?? []) {
-        await purgeMedia(supabase, UNIT_BUCKET, u.airtable_id);
-      }
-      await supabase.from("units").delete().eq("building_airtable_id", airtable_id);
-      await purgeMedia(supabase, BUILDING_BUCKET, airtable_id);
-      const { error } = await supabase
-        .from("buildings")
-        .delete()
-        .eq("airtable_id", airtable_id);
-      if (error) throw new Error(error.message);
-      return NextResponse.json({ ok: true });
+    for (const id of ids) {
+      await deleteOne(supabase, table, id);
     }
-
-    await purgeMedia(supabase, UNIT_BUCKET, airtable_id);
-    const { error } = await supabase
-      .from("units")
-      .delete()
-      .eq("airtable_id", airtable_id);
-    if (error) throw new Error(error.message);
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, count: ids.length });
   } catch (error) {
     console.error("DELETE /api/admin/listings error:", error);
     return NextResponse.json(
@@ -237,6 +239,38 @@ export async function DELETE(req: NextRequest) {
 }
 
 type Supabase = ReturnType<typeof getServiceClient>;
+
+/** Permanently delete one listing (+ its child units/media if a building). */
+async function deleteOne(
+  supabase: Supabase,
+  table: "units" | "buildings",
+  airtable_id: string
+) {
+  if (table === "buildings") {
+    // Remove child units first (FK), cleaning their media too.
+    const { data: childUnits } = await supabase
+      .from("units")
+      .select("airtable_id")
+      .eq("building_airtable_id", airtable_id);
+    for (const u of childUnits ?? []) {
+      await purgeMedia(supabase, UNIT_BUCKET, u.airtable_id);
+    }
+    await supabase.from("units").delete().eq("building_airtable_id", airtable_id);
+    await purgeMedia(supabase, BUILDING_BUCKET, airtable_id);
+    const { error } = await supabase
+      .from("buildings")
+      .delete()
+      .eq("airtable_id", airtable_id);
+    if (error) throw new Error(error.message);
+    return;
+  }
+  await purgeMedia(supabase, UNIT_BUCKET, airtable_id);
+  const { error } = await supabase
+    .from("units")
+    .delete()
+    .eq("airtable_id", airtable_id);
+  if (error) throw new Error(error.message);
+}
 
 /** Delete every stored object under `<airtableId>/` in the given bucket. */
 async function purgeMedia(supabase: Supabase, bucket: string, airtableId: string) {

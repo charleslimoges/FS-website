@@ -304,6 +304,78 @@ function StatusActions({
   );
 }
 
+/** Change the lifecycle status of one or many rows of a given type. */
+async function patchStatus(
+  type: "units" | "buildings",
+  ids: string[],
+  status: ListingStatus
+) {
+  if (!ids.length) return;
+  await fetch("/api/admin/listings", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ type, airtable_ids: ids, status }),
+  });
+}
+
+/** Prompt shown when activating a building that still has inactive units. */
+function ActivateUnitsDialog({
+  count, loading, onConfirm, onCancel,
+}: {
+  count: number;
+  loading: boolean;
+  onConfirm: (alsoUnits: boolean) => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 px-4" onClick={onCancel}>
+      <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+        <div className="w-10 h-10 bg-emerald-50 rounded-xl flex items-center justify-center mb-4">
+          <Eye className="w-5 h-5 text-emerald-600" />
+        </div>
+        <h3 className="text-base font-semibold text-brand-navy mb-1">Activate units too?</h3>
+        <p className="text-sm text-gray-500 mb-5">
+          This building has {count} unit{count !== 1 ? "s" : ""} that {count !== 1 ? "aren't" : "isn't"} active yet.
+          Only active units appear on the website. Make {count !== 1 ? "them" : "it"} active as well?
+        </p>
+        <div className="flex gap-2 justify-end flex-wrap">
+          <button onClick={onCancel} className="px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-700 rounded-lg transition-colors">Cancel</button>
+          <button
+            onClick={() => onConfirm(false)}
+            disabled={loading}
+            className="px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors disabled:opacity-50"
+          >
+            Building only
+          </button>
+          <button
+            onClick={() => onConfirm(true)}
+            disabled={loading}
+            className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-colors disabled:opacity-50"
+          >
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Eye className="w-4 h-4" />}
+            Activate units too
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Small square checkbox used for multi-select on cards and toolbars. */
+function SelectBox({ checked, onChange, label }: { checked: boolean; onChange: () => void; label?: string }) {
+  return (
+    <label className="flex items-center gap-2 cursor-pointer select-none" onClick={(e) => e.stopPropagation()}>
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={onChange}
+        className="w-4 h-4 rounded border-gray-300 text-brand-blue focus:ring-brand-blue cursor-pointer"
+      />
+      {label && <span className="text-xs font-medium text-gray-500">{label}</span>}
+    </label>
+  );
+}
+
 // ─── Root ──────────────────────────────────────────────────────────────────────
 
 export default function AdminPage() {
@@ -698,6 +770,7 @@ function ManageListings() {
   const [units, setUnits] = useState<UnitRow[]>([]);
   const [buildings, setBuildings] = useState<BuildingRow[]>([]);
   const [loading, setLoading] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -712,12 +785,32 @@ function ManageListings() {
   }, []);
 
   useEffect(() => { reload(); }, [reload]);
+  // Selection is scoped to the current view + status tab.
+  useEffect(() => { setSelected(new Set()); }, [view, status]);
 
   const rows: { status: ListingStatus }[] = view === "units" ? units : buildings;
   const countFor = (s: ListingStatus) => rows.filter((r) => r.status === s).length;
 
   const shownUnits = units.filter((u) => u.status === status);
   const shownBuildings = buildings.filter((b) => b.status === status);
+  const shownIds = (view === "units" ? shownUnits : shownBuildings).map((r) => r.airtable_id);
+  const allSelected = shownIds.length > 0 && shownIds.every((id) => selected.has(id));
+
+  function toggle(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+  function toggleAll() {
+    setSelected(allSelected ? new Set() : new Set(shownIds));
+  }
+
+  async function afterBulk() {
+    setSelected(new Set());
+    await reload();
+  }
 
   return (
     <div className="bg-white rounded-3xl p-6 shadow-card">
@@ -732,23 +825,43 @@ function ManageListings() {
       </div>
 
       {/* Status tabs: Hidden (grey) · Active (green) · Archived (orange) */}
-      <div className="flex gap-2 mb-6 bg-gray-50 p-1 rounded-2xl w-fit">
+      <div className="flex gap-2 mb-4 bg-gray-50 p-1 rounded-2xl w-fit">
         {STATUS_ORDER.map((s) => {
           const m = STATUS_META[s];
-          const selected = status === s;
+          const isSel = status === s;
           return (
             <button
               key={s}
               onClick={() => setStatus(s)}
               className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-colors ${
-                selected ? m.tab : "text-gray-500 hover:text-gray-700"}`}
+                isSel ? m.tab : "text-gray-500 hover:text-gray-700"}`}
             >
-              <span className={`w-1.5 h-1.5 rounded-full ${selected ? "bg-white/80" : m.dot}`} />
+              <span className={`w-1.5 h-1.5 rounded-full ${isSel ? "bg-white/80" : m.dot}`} />
               {m.label} ({countFor(s)})
             </button>
           );
         })}
       </div>
+
+      {/* Select-all + bulk action bar */}
+      {shownIds.length > 0 && (
+        <div className="flex items-center justify-between gap-3 mb-5 flex-wrap">
+          <SelectBox
+            checked={allSelected}
+            onChange={toggleAll}
+            label={selected.size > 0 ? `${selected.size} selected` : "Select all"}
+          />
+          {selected.size > 0 && (
+            <BulkBar
+              view={view}
+              status={status}
+              ids={Array.from(selected)}
+              units={units}
+              onDone={afterBulk}
+            />
+          )}
+        </div>
+      )}
 
       {loading ? (
         <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 text-gray-400 animate-spin" /></div>
@@ -758,7 +871,13 @@ function ManageListings() {
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {shownUnits.map((u) => (
-              <UnitCard key={u.airtable_id} unit={u} onChanged={reload} />
+              <UnitCard
+                key={u.airtable_id}
+                unit={u}
+                onChanged={reload}
+                selected={selected.has(u.airtable_id)}
+                onToggleSelect={() => toggle(u.airtable_id)}
+              />
             ))}
           </div>
         )
@@ -772,9 +891,116 @@ function ManageListings() {
               building={b}
               units={units.filter((u) => u.building_airtable_id === b.airtable_id)}
               onChanged={reload}
+              selected={selected.has(b.airtable_id)}
+              onToggleSelect={() => toggle(b.airtable_id)}
             />
           ))}
         </div>
+      )}
+    </div>
+  );
+}
+
+/** Bulk actions for the current selection; choices depend on the status tab. */
+function BulkBar({
+  view, status, ids, units, onDone,
+}: {
+  view: "units" | "buildings";
+  status: ListingStatus;
+  ids: string[];
+  units: UnitRow[];
+  onDone: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmActivate, setConfirmActivate] = useState(false);
+
+  // Units (across the selected buildings) that aren't active yet.
+  const inactiveChildUnits = units.filter(
+    (u) => u.building_airtable_id && ids.includes(u.building_airtable_id) && u.status !== "active"
+  );
+
+  async function setStatus(next: ListingStatus) {
+    setBusy(true);
+    try { await patchStatus(view, ids, next); onDone(); }
+    finally { setBusy(false); }
+  }
+
+  async function activate(alsoUnits: boolean) {
+    setBusy(true);
+    try {
+      await patchStatus("buildings", ids, "active");
+      if (alsoUnits)
+        await patchStatus("units", inactiveChildUnits.map((u) => u.airtable_id), "active");
+      onDone();
+    } finally { setBusy(false); setConfirmActivate(false); }
+  }
+
+  function onMakeActive() {
+    if (view === "buildings" && inactiveChildUnits.length > 0) setConfirmActivate(true);
+    else setStatus("active");
+  }
+
+  async function del() {
+    setBusy(true);
+    try {
+      await fetch("/api/admin/listings", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: view, airtable_ids: ids }),
+      });
+      onDone();
+    } finally { setBusy(false); setConfirmDelete(false); }
+  }
+
+  const spin = busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null;
+  const btn = "flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded-lg border transition-colors disabled:opacity-50";
+  const n = ids.length;
+
+  return (
+    <div className="flex items-center gap-1.5 flex-wrap">
+      {status !== "active" && (
+        <button onClick={onMakeActive} disabled={busy} className={`${btn} bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-100`}>
+          {spin ?? <Eye className="w-3.5 h-3.5" />} Make active
+        </button>
+      )}
+      {status === "active" && (
+        <button onClick={() => setStatus("hidden")} disabled={busy} className={`${btn} bg-gray-100 text-gray-600 hover:bg-gray-200 border-gray-200`}>
+          {spin ?? <EyeOff className="w-3.5 h-3.5" />} Hide
+        </button>
+      )}
+      {status !== "archived" ? (
+        <button onClick={() => setStatus("archived")} disabled={busy} className={`${btn} bg-orange-50 text-orange-700 hover:bg-orange-100 border-orange-100`}>
+          {spin ?? <Archive className="w-3.5 h-3.5" />} Archive
+        </button>
+      ) : (
+        <>
+          <button onClick={() => setStatus("hidden")} disabled={busy} className={`${btn} bg-gray-100 text-gray-600 hover:bg-gray-200 border-gray-200`}>
+            {spin ?? <Undo2 className="w-3.5 h-3.5" />} Restore
+          </button>
+          <button onClick={() => setConfirmDelete(true)} disabled={busy} className={`${btn} bg-red-50 text-red-600 hover:bg-red-100 border-red-100`}>
+            <Trash2 className="w-3.5 h-3.5" /> Delete forever
+          </button>
+        </>
+      )}
+
+      {confirmActivate && (
+        <ActivateUnitsDialog
+          count={inactiveChildUnits.length}
+          loading={busy}
+          onConfirm={activate}
+          onCancel={() => setConfirmActivate(false)}
+        />
+      )}
+      {confirmDelete && (
+        <ConfirmDialog
+          title={`Delete ${n} ${view === "buildings" ? "building" : "unit"}${n !== 1 ? "s" : ""} forever?`}
+          body={`Permanently deletes the selected archived ${view}${view === "buildings" ? " and all their units" : ""}, plus uploaded media. This cannot be undone. Airtable is not affected.`}
+          confirmLabel="Delete forever"
+          loading={busy}
+          onConfirm={del}
+          onCancel={() => setConfirmDelete(false)}
+        />
       )}
     </div>
   );
@@ -794,7 +1020,14 @@ function Empty({ text }: { text: string }) {
 
 // ─── Unit card ────────────────────────────────────────────────────────────────
 
-function UnitCard({ unit, onChanged }: { unit: UnitRow; onChanged: () => void }) {
+function UnitCard({
+  unit, onChanged, selected, onToggleSelect,
+}: {
+  unit: UnitRow;
+  onChanged: () => void;
+  selected?: boolean;
+  onToggleSelect?: () => void;
+}) {
   const [expanded, setExpanded] = useState(false);
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState<"status" | "refresh" | "delete" | null>(null);
@@ -803,14 +1036,8 @@ function UnitCard({ unit, onChanged }: { unit: UnitRow; onChanged: () => void })
 
   async function setStatus(status: ListingStatus) {
     setBusy("status");
-    try {
-      await fetch("/api/admin/listings", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "units", airtable_id: unit.airtable_id, status }),
-      });
-      onChanged();
-    } finally { setBusy(null); }
+    try { await patchStatus("units", [unit.airtable_id], status); onChanged(); }
+    finally { setBusy(null); }
   }
 
   async function refresh() {
@@ -841,7 +1068,13 @@ function UnitCard({ unit, onChanged }: { unit: UnitRow; onChanged: () => void })
     <div className="bg-gray-50 rounded-2xl border border-gray-100 overflow-hidden">
       <div className="p-4">
         <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
+          <div className="flex items-start gap-2.5 min-w-0">
+            {onToggleSelect && (
+              <div className="pt-0.5">
+                <SelectBox checked={Boolean(selected)} onChange={onToggleSelect} />
+              </div>
+            )}
+            <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-sm font-semibold text-brand-navy truncate">Unit {unit.unit_number}</span>
               {unit.apartment_status && (
@@ -858,6 +1091,7 @@ function UnitCard({ unit, onChanged }: { unit: UnitRow; onChanged: () => void })
               {unit.images.length > 0 && ` · ${unit.images.length}📷`}
               {unit.videos.length > 0 && ` · ${unit.videos.length}🎬`}
             </p>
+            </div>
           </div>
           <StatusPill status={unit.status} />
         </div>
@@ -940,24 +1174,44 @@ function UnitDetails({ unit }: { unit: UnitRow }) {
 
 // ─── Building card (edit + nested units) ──────────────────────────────────────
 
-function BuildingCard({ building, units, onChanged }: { building: BuildingRow; units: UnitRow[]; onChanged: () => void }) {
+function BuildingCard({
+  building, units, onChanged, selected, onToggleSelect,
+}: {
+  building: BuildingRow;
+  units: UnitRow[];
+  onChanged: () => void;
+  selected?: boolean;
+  onToggleSelect?: () => void;
+}) {
   const [expanded, setExpanded] = useState(false);
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState<"status" | "refresh" | "delete" | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmActivate, setConfirmActivate] = useState(false);
   const isManual = building.airtable_id.startsWith("manual-");
   const liveUnits = units.filter((u) => u.status === "active").length;
+  const inactiveUnits = units.filter((u) => u.status !== "active");
 
   async function setStatus(status: ListingStatus) {
     setBusy("status");
+    try { await patchStatus("buildings", [building.airtable_id], status); onChanged(); }
+    finally { setBusy(null); }
+  }
+
+  /** Activating a building with inactive units → ask whether to activate them too. */
+  function handleSet(status: ListingStatus) {
+    if (status === "active" && inactiveUnits.length > 0) setConfirmActivate(true);
+    else setStatus(status);
+  }
+
+  async function activate(alsoUnits: boolean) {
+    setBusy("status");
     try {
-      await fetch("/api/admin/listings", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "buildings", airtable_id: building.airtable_id, status }),
-      });
+      await patchStatus("buildings", [building.airtable_id], "active");
+      if (alsoUnits)
+        await patchStatus("units", inactiveUnits.map((u) => u.airtable_id), "active");
       onChanged();
-    } finally { setBusy(null); }
+    } finally { setBusy(null); setConfirmActivate(false); }
   }
 
   async function refresh() {
@@ -988,15 +1242,22 @@ function BuildingCard({ building, units, onChanged }: { building: BuildingRow; u
     <div className="bg-gray-50 rounded-2xl border border-gray-100 overflow-hidden">
       <div className="p-4">
         <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <Building2 className="w-4 h-4 text-brand-blue shrink-0" />
-              <span className="text-sm font-semibold text-brand-navy truncate">{building.name}</span>
-              {isManual && <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-100 text-purple-700">Manual</span>}
+          <div className="flex items-start gap-2.5 min-w-0">
+            {onToggleSelect && (
+              <div className="pt-0.5">
+                <SelectBox checked={Boolean(selected)} onChange={onToggleSelect} />
+              </div>
+            )}
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <Building2 className="w-4 h-4 text-brand-blue shrink-0" />
+                <span className="text-sm font-semibold text-brand-navy truncate">{building.name}</span>
+                {isManual && <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-100 text-purple-700">Manual</span>}
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                {units.length} unit{units.length !== 1 ? "s" : ""} · {liveUnits} active
+              </p>
             </div>
-            <p className="text-xs text-gray-500 mt-1">
-              {units.length} unit{units.length !== 1 ? "s" : ""} · {liveUnits} active
-            </p>
           </div>
           <StatusPill status={building.status} />
         </div>
@@ -1020,7 +1281,7 @@ function BuildingCard({ building, units, onChanged }: { building: BuildingRow; u
         <StatusActions
           status={building.status}
           busy={busy === "status"}
-          onSet={setStatus}
+          onSet={handleSet}
           onDelete={() => setConfirmDelete(true)}
         />
       </div>
@@ -1065,6 +1326,15 @@ function BuildingCard({ building, units, onChanged }: { building: BuildingRow; u
           loading={busy === "delete"}
           onConfirm={del}
           onCancel={() => setConfirmDelete(false)}
+        />
+      )}
+
+      {confirmActivate && (
+        <ActivateUnitsDialog
+          count={inactiveUnits.length}
+          loading={busy === "status"}
+          onConfirm={activate}
+          onCancel={() => setConfirmActivate(false)}
         />
       )}
     </div>
