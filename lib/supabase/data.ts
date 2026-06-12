@@ -6,6 +6,7 @@ import {
   AirtableAttachment,
   UnitFilters,
   BuildingFilters,
+  FilterOptions,
 } from "../types";
 
 // ─── Admin overrides (sticky edits) ──────────────────────────────────────────
@@ -125,9 +126,12 @@ export function mapUnitRow(row: UnitRow): Unit & { videos: MediaItem[] } {
     available_date: row.available_date ?? "",
     promo: Number(row.promo ?? 0) > 0,
     parking: mapParking(row.parking),
+    parking_options: row.parking ?? [],
     utilities_included: (row.utilities ?? []).length > 0,
+    utilities: row.utilities ?? [],
     appliances: row.appliances ?? [],
     amenities: row.amenities ?? [],
+    pets_options: row.pets ?? [],
     pets: mapPets(row.pets),
     furnished: Boolean(row.furnished),
     floor: 0,
@@ -158,6 +162,10 @@ export function mapBuildingRow(
     min_price: prices.length ? Math.min(...prices) : 0,
     max_price: prices.length ? Math.max(...prices) : 0,
     amenities: row.amenities ?? [],
+    utilities: row.utilities ?? [],
+    pets: row.pets ?? [],
+    parking: row.parking ?? [],
+    bedrooms: Array.from(new Set(units.map((u) => Number(u.bedrooms ?? 0)))).sort((a, b) => a - b),
     description: row.display_description ?? "",
     unit_count: units.length,
     published: row.published,
@@ -166,107 +174,168 @@ export function mapBuildingRow(
   };
 }
 
+// ─── Facet matching helpers (filters use raw Airtable strings) ───────────────
+
+/** True if `have` contains every value in `want` (AND within a facet). */
+function hasAll(have: string[] | null | undefined, want: string[]): boolean {
+  const set = have ?? [];
+  return want.every((w) => set.includes(w));
+}
+
+/** True if `have` contains any value in `want` (OR within a facet). */
+function hasAny(have: string[] | null | undefined, want: string[]): boolean {
+  const set = have ?? [];
+  return want.some((w) => set.includes(w));
+}
+
+/** Sorted distinct non-empty strings from a set of array columns. */
+function distinctStrings(rows: { [k: string]: unknown }[], key: string): string[] {
+  const set = new Set<string>();
+  for (const r of rows) {
+    const v = r[key];
+    if (Array.isArray(v)) for (const x of v) if (x) set.add(String(x).trim());
+  }
+  return Array.from(set).sort((a, b) => a.localeCompare(b));
+}
+
+/** Build the FilterOptions facets from a set of unit rows. */
+function collectFacets(rows: UnitRow[]): FilterOptions {
+  const beds = new Set<number>();
+  const baths = new Set<number>();
+  for (const r of rows) {
+    beds.add(Number(r.bedrooms ?? 0));
+    if (r.bathrooms != null) baths.add(Number(r.bathrooms));
+  }
+  return {
+    neighbourhoods: distinctStrings(rows as never, "neighbourhood"),
+    amenities: distinctStrings(rows as never, "amenities"),
+    utilities: distinctStrings(rows as never, "utilities"),
+    appliances: distinctStrings(rows as never, "appliances"),
+    pets: distinctStrings(rows as never, "pets"),
+    parking: distinctStrings(rows as never, "parking"),
+    bedrooms: Array.from(beds).sort((a, b) => a - b),
+    bathrooms: Array.from(baths).sort((a, b) => a - b),
+  };
+}
+
 // ─── Public reads (anon client → only published rows via RLS) ────────────────
 
-/** Published units only; excludes in-construction (public shows vacant/occupied). */
-export async function getPublishedUnits(
-  filters: UnitFilters = {}
-): Promise<Unit[]> {
+/** Raw, override-applied unit rows that pass the public-visibility rule. */
+async function publicUnitRows(): Promise<UnitRow[]> {
   const supabase = getPublicClient();
   const { data, error } = await supabase
     .from("units")
     .select("*")
     .order("price", { ascending: true });
   if (error) throw new Error(error.message);
+  return (data ?? []).map(applyOverrides).filter(isPublicUnit);
+}
 
-  // Public rule: Vacant/Occupied, not Signed, and Active (see isPublicUnit).
-  let units = (data ?? []).map(applyOverrides).filter(isPublicUnit).map(mapUnitRow);
+/** True if a raw unit row matches every facet in `filters`. */
+function unitMatches(r: UnitRow, filters: UnitFilters): boolean {
+  const price = Number(r.price ?? 0);
+  if (filters.min_price !== undefined && price < filters.min_price) return false;
+  if (filters.max_price !== undefined && price > filters.max_price) return false;
+  if (filters.bedrooms?.length && !filters.bedrooms.includes(Number(r.bedrooms ?? 0)))
+    return false;
+  if (filters.bathrooms?.length && !filters.bathrooms.includes(Number(r.bathrooms ?? 0)))
+    return false;
+  if (filters.promo && !(Number(r.promo ?? 0) > 0)) return false;
+  if (filters.furnished && !r.furnished) return false;
+  if (filters.utilities_included && (r.utilities ?? []).length === 0) return false;
+  if (filters.amenities?.length && !hasAll(r.amenities, filters.amenities)) return false;
+  if (filters.utilities?.length && !hasAll(r.utilities, filters.utilities)) return false;
+  if (filters.appliances?.length && !hasAll(r.appliances, filters.appliances)) return false;
+  if (filters.pets?.length && !hasAny(r.pets, filters.pets)) return false;
+  if (filters.parking?.length && !hasAny(r.parking, filters.parking)) return false;
+  if (filters.neighbourhood?.length && !hasAny(r.neighbourhood, filters.neighbourhood))
+    return false;
+  if (
+    filters.available_now &&
+    !(r.available_date && new Date(r.available_date) <= new Date())
+  )
+    return false;
+  return true;
+}
 
-  const buildingKeys = filters.buildings ?? [];
+/** Published units only; excludes in-construction (public shows vacant/occupied). */
+export async function getPublishedUnits(
+  filters: UnitFilters = {}
+): Promise<Unit[]> {
+  let rows = await publicUnitRows();
+
+  const buildingKeys = [...(filters.buildings ?? [])];
   if (filters.building_id) buildingKeys.push(filters.building_id);
   if (buildingKeys.length) {
-    units = units.filter(
-      (u) =>
-        buildingKeys.includes(u.building_id) ||
-        buildingKeys.includes(u.building_name ?? "")
+    rows = rows.filter(
+      (r) =>
+        buildingKeys.includes(r.building_airtable_id ?? "") ||
+        buildingKeys.includes(r.building_name ?? "")
     );
   }
-  if (filters.min_price !== undefined)
-    units = units.filter((u) => u.price >= filters.min_price!);
-  if (filters.max_price !== undefined)
-    units = units.filter((u) => u.price <= filters.max_price!);
-  if (filters.bedrooms?.length)
-    units = units.filter((u) => filters.bedrooms!.includes(u.bedrooms));
-  if (filters.promo) units = units.filter((u) => u.promo);
-  if (filters.furnished) units = units.filter((u) => u.furnished);
-  if (filters.utilities_included)
-    units = units.filter((u) => u.utilities_included);
-  if (filters.parking?.length)
-    units = units.filter((u) => u.parking !== "none");
-  if (filters.pets?.length) units = units.filter((u) => u.pets !== "no");
-  if (filters.amenities?.length)
-    units = units.filter((u) =>
-      filters.amenities!.every((a) => u.amenities.includes(a))
-    );
-  if (filters.appliances?.length)
-    units = units.filter((u) =>
-      filters.appliances!.every((a) => u.appliances.includes(a))
-    );
-  if (filters.available_now)
-    units = units.filter(
-      (u) => u.available_date && new Date(u.available_date) <= new Date()
-    );
-  if (filters.neighbourhood?.length)
-    units = units.filter((u) =>
-      filters.neighbourhood!.includes(u.building_neighbourhood ?? "")
-    );
 
-  return units;
+  return rows.filter((r) => unitMatches(r, filters)).map(mapUnitRow);
+}
+
+/** Distinct facet values across all publicly-visible units. */
+export async function getUnitFilterOptions(): Promise<FilterOptions> {
+  return collectFacets(await publicUnitRows());
+}
+
+/** Map of building airtable_id → its publicly-visible units. */
+async function publicUnitsByBuilding(): Promise<Map<string, UnitRow[]>> {
+  const supabase = getPublicClient();
+  const { data, error } = await supabase.from("units").select("*");
+  if (error) throw new Error(error.message);
+  const byBuilding = new Map<string, UnitRow[]>();
+  (data ?? [])
+    .map(applyOverrides)
+    .filter(isPublicUnit)
+    .forEach((u) => {
+      if (!u.building_airtable_id) return;
+      const arr = byBuilding.get(u.building_airtable_id) ?? [];
+      arr.push(u);
+      byBuilding.set(u.building_airtable_id, arr);
+    });
+  return byBuilding;
 }
 
 export async function getPublishedBuildings(
   filters: BuildingFilters = {}
 ): Promise<Building[]> {
   const supabase = getPublicClient();
-  const [{ data: bData, error: bErr }, { data: uData, error: uErr }] =
-    await Promise.all([
-      supabase.from("buildings").select("*"),
-      supabase.from("units").select("*"),
-    ]);
+  const [{ data: bData, error: bErr }, unitsByBuilding] = await Promise.all([
+    supabase.from("buildings").select("*"),
+    publicUnitsByBuilding(),
+  ]);
   if (bErr) throw new Error(bErr.message);
-  if (uErr) throw new Error(uErr.message);
 
-  // Only count Vacant + Occupied units toward a building's price range and
-  // unit count — same public rule as getPublishedUnits.
-  const unitsByBuilding = new Map<string, UnitRow[]>();
-  (uData ?? [])
-    .map(applyOverrides)
-    .filter(isPublicUnit)
-    .forEach((u) => {
-      if (!u.building_airtable_id) return;
-      const arr = unitsByBuilding.get(u.building_airtable_id) ?? [];
-      arr.push(u);
-      unitsByBuilding.set(u.building_airtable_id, arr);
-    });
+  const buildings: Building[] = [];
+  for (const raw of (bData ?? []).map(applyOverrides)) {
+    let units = unitsByBuilding.get(raw.airtable_id) ?? [];
 
-  // Drop buildings that have no publicly-visible units.
-  let buildings = (bData ?? [])
-    .map(applyOverrides)
-    .map((b) => mapBuildingRow(b, unitsByBuilding.get(b.airtable_id) ?? []))
-    .filter((b) => b.unit_count > 0);
+    // Unit-derived facets: keep only units that match, then require ≥1.
+    if (filters.bedrooms?.length)
+      units = units.filter((u) => filters.bedrooms!.includes(Number(u.bedrooms ?? 0)));
+    if (filters.bathrooms?.length)
+      units = units.filter((u) => filters.bathrooms!.includes(Number(u.bathrooms ?? 0)));
+    if (filters.appliances?.length)
+      units = units.filter((u) => hasAll(u.appliances, filters.appliances!));
+    if (units.length === 0) continue;
 
-  if (filters.neighbourhood?.length)
-    buildings = buildings.filter((b) =>
-      filters.neighbourhood!.includes(b.neighbourhood)
-    );
-  if (filters.amenities?.length)
-    buildings = buildings.filter((b) =>
-      filters.amenities!.every((a) => b.amenities.includes(a))
-    );
-  if (filters.min_price !== undefined)
-    buildings = buildings.filter((b) => b.max_price >= filters.min_price!);
-  if (filters.max_price !== undefined)
-    buildings = buildings.filter((b) => b.min_price <= filters.max_price!);
+    // Building-level facets, matched on the building's own columns.
+    if (filters.neighbourhood?.length && !hasAny(raw.neighbourhood, filters.neighbourhood))
+      continue;
+    if (filters.amenities?.length && !hasAll(raw.amenities, filters.amenities)) continue;
+    if (filters.utilities?.length && !hasAll(raw.utilities, filters.utilities)) continue;
+    if (filters.pets?.length && !hasAny(raw.pets, filters.pets)) continue;
+    if (filters.parking?.length && !hasAny(raw.parking, filters.parking)) continue;
+
+    const b = mapBuildingRow(raw, units);
+    if (filters.min_price !== undefined && b.max_price < filters.min_price) continue;
+    if (filters.max_price !== undefined && b.min_price > filters.max_price) continue;
+    buildings.push(b);
+  }
 
   if (filters.sort === "price_asc")
     buildings.sort((a, b) => a.min_price - b.min_price);
@@ -274,6 +343,38 @@ export async function getPublishedBuildings(
     buildings.sort((a, b) => b.min_price - a.min_price);
 
   return buildings;
+}
+
+/**
+ * Distinct facet values for the buildings page. Building-level facets
+ * (neighbourhood, amenities, utilities, pets, parking) come from the building
+ * rows; unit-derived facets (appliances, bedrooms, bathrooms) from their units.
+ */
+export async function getBuildingFilterOptions(): Promise<FilterOptions> {
+  const supabase = getPublicClient();
+  const [{ data: bData, error: bErr }, unitsByBuilding] = await Promise.all([
+    supabase.from("buildings").select("*"),
+    publicUnitsByBuilding(),
+  ]);
+  if (bErr) throw new Error(bErr.message);
+
+  // Only buildings that have ≥1 public unit.
+  const buildingRows = (bData ?? [])
+    .map(applyOverrides)
+    .filter((b) => (unitsByBuilding.get(b.airtable_id) ?? []).length > 0);
+  const unitRows = Array.from(unitsByBuilding.values()).flat();
+  const unitFacets = collectFacets(unitRows);
+
+  return {
+    neighbourhoods: distinctStrings(buildingRows as never, "neighbourhood"),
+    amenities: distinctStrings(buildingRows as never, "amenities"),
+    utilities: distinctStrings(buildingRows as never, "utilities"),
+    pets: distinctStrings(buildingRows as never, "pets"),
+    parking: distinctStrings(buildingRows as never, "parking"),
+    appliances: unitFacets.appliances,
+    bedrooms: unitFacets.bedrooms,
+    bathrooms: unitFacets.bathrooms,
+  };
 }
 
 export async function getPublishedBuildingById(

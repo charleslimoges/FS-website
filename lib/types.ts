@@ -7,6 +7,10 @@ export interface Building {
   min_price: number;
   max_price: number;
   amenities: string[];
+  utilities: string[];
+  pets: string[];
+  parking: string[];
+  bedrooms: number[];
   description: string;
   unit_count: number;
   published?: boolean;
@@ -27,9 +31,12 @@ export interface Unit {
   available_date: string;
   promo: boolean;
   parking: "none" | "included" | "available";
+  parking_options: string[];
   utilities_included: boolean;
+  utilities: string[];
   appliances: string[];
   amenities: string[];
+  pets_options: string[];
   pets: "yes" | "no" | "cats_only";
   furnished: boolean;
   floor: number;
@@ -83,6 +90,7 @@ export interface UnitFilters {
   promo?: boolean;
   parking?: string[];
   utilities_included?: boolean;
+  utilities?: string[];
   appliances?: string[];
   amenities?: string[];
   pets?: string[];
@@ -98,7 +106,25 @@ export interface BuildingFilters {
   min_price?: number;
   max_price?: number;
   amenities?: string[];
+  utilities?: string[];
+  appliances?: string[];
+  pets?: string[];
+  parking?: string[];
+  bedrooms?: number[];
+  bathrooms?: number[];
   sort?: "price_asc" | "price_desc" | "newest";
+}
+
+/** Distinct facet values present in the live data, used to build filter dropdowns. */
+export interface FilterOptions {
+  neighbourhoods: string[];
+  amenities: string[];
+  utilities: string[];
+  appliances: string[];
+  pets: string[];
+  parking: string[];
+  bedrooms: number[];
+  bathrooms: number[];
 }
 
 export type Neighbourhood =

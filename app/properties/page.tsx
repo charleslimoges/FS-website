@@ -4,13 +4,20 @@ import { useEffect, useState, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { SlidersHorizontal, X, ChevronDown } from "lucide-react";
 import UnitCard from "@/components/ui/UnitCard";
+import MultiSelect from "@/components/ui/MultiSelect";
 import BookVisitModal from "@/components/ui/BookVisitModal";
 import UnitDetailModal from "@/components/ui/UnitDetailModal";
 import { UnitSkeletonCard } from "@/components/ui/SkeletonCard";
-import { Unit, AMENITIES, AMENITY_LABELS, APPLIANCES, APPLIANCE_LABELS } from "@/lib/types";
+import { Unit, FilterOptions } from "@/lib/types";
+
+const EMPTY_OPTIONS: FilterOptions = {
+  neighbourhoods: [], amenities: [], utilities: [], appliances: [],
+  pets: [], parking: [], bedrooms: [], bathrooms: [],
+};
 
 const EMPTY_FILTERS = {
   buildings: [] as string[],
+  neighbourhood: [] as string[],
   min_price: "",
   max_price: "",
   bedrooms: [] as number[],
@@ -18,25 +25,20 @@ const EMPTY_FILTERS = {
   promo: false,
   parking: [] as string[],
   utilities_included: false,
+  utilities: [] as string[],
   appliances: [] as string[],
   amenities: [] as string[],
   pets: [] as string[],
   furnished: false,
   available_now: false,
-  unit_number: "",
 };
 
 type Filters = typeof EMPTY_FILTERS;
 
-function FilterPill({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
+const bedLabel = (n: number) => (n === 0 ? "Studio" : `${n} bd`);
+const bathLabel = (n: number) => `${n % 1 === 0 ? n : n.toFixed(1)} ba`;
+
+function FilterPill({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
     <button
       onClick={onClick}
@@ -51,37 +53,30 @@ function FilterPill({
   );
 }
 
-function ToggleRow({
-  checked,
-  onChange,
-  label,
-}: {
-  checked: boolean;
-  onChange: (v: boolean) => void;
-  label: string;
-}) {
+function ToggleRow({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
   return (
     <label className="flex items-center gap-3 cursor-pointer group">
       <div
         onClick={() => onChange(!checked)}
-        className={`relative w-9 h-5 rounded-full transition-colors cursor-pointer ${
-          checked ? "bg-brand-navy" : "bg-gray-200"
-        }`}
+        className={`relative w-9 h-5 rounded-full transition-colors cursor-pointer ${checked ? "bg-brand-navy" : "bg-gray-200"}`}
       >
-        <div
-          className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${
-            checked ? "translate-x-4" : "translate-x-0"
-          }`}
-        />
+        <div className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${checked ? "translate-x-4" : "translate-x-0"}`} />
       </div>
-      <span className="text-sm text-gray-600 group-hover:text-brand-navy transition-colors select-none">
-        {label}
-      </span>
+      <span className="text-sm text-gray-600 group-hover:text-brand-navy transition-colors select-none">{label}</span>
     </label>
   );
 }
 
-interface UnitFilterSidebarProps {
+function countFilters(f: Filters): number {
+  return (
+    f.buildings.length + f.neighbourhood.length + f.bedrooms.length + f.bathrooms.length +
+    f.parking.length + f.pets.length + f.amenities.length + f.appliances.length + f.utilities.length +
+    (f.min_price ? 1 : 0) + (f.max_price ? 1 : 0) + (f.promo ? 1 : 0) +
+    (f.utilities_included ? 1 : 0) + (f.furnished ? 1 : 0) + (f.available_now ? 1 : 0)
+  );
+}
+
+interface SidebarProps {
   draft: Filters;
   setDraft: React.Dispatch<React.SetStateAction<Filters>>;
   applied: Filters;
@@ -89,80 +84,47 @@ interface UnitFilterSidebarProps {
   setSort: (v: string) => void;
   clearFilters: () => void;
   applyFilters: () => void;
+  options: FilterOptions;
 }
 
-function UnitFilterSidebar({
-  draft,
-  setDraft,
-  applied,
-  sort,
-  setSort,
-  clearFilters,
-  applyFilters,
-}: UnitFilterSidebarProps) {
-  const [advancedOpen, setAdvancedOpen] = useState(false);
-
-  function toggle<T>(key: keyof Filters, value: T) {
+function UnitFilterSidebar({ draft, setDraft, applied, sort, setSort, clearFilters, applyFilters, options }: SidebarProps) {
+  function toggleNum(key: "bedrooms" | "bathrooms", value: number) {
     setDraft((f) => {
-      const arr = f[key] as T[];
-      return {
-        ...f,
-        [key]: arr.includes(value) ? arr.filter((x) => x !== value) : [...arr, value],
-      };
+      const arr = f[key];
+      return { ...f, [key]: arr.includes(value) ? arr.filter((x) => x !== value) : [...arr, value] };
     });
   }
+  const setList = (key: keyof Filters) => (next: string[]) => setDraft((f) => ({ ...f, [key]: next }));
 
-  const draftFilterCount =
-    draft.buildings.length +
-    draft.bedrooms.length +
-    draft.parking.length +
-    draft.pets.length +
-    draft.amenities.length +
-    draft.appliances.length +
-    (draft.min_price ? 1 : 0) +
-    (draft.max_price ? 1 : 0) +
-    (draft.promo ? 1 : 0) +
-    (draft.utilities_included ? 1 : 0) +
-    (draft.furnished ? 1 : 0) +
-    (draft.available_now ? 1 : 0) +
-    (draft.unit_number ? 1 : 0);
-
-  const appliedFilterCount =
-    applied.buildings.length +
-    applied.bedrooms.length +
-    applied.parking.length +
-    applied.pets.length +
-    applied.amenities.length +
-    applied.appliances.length +
-    (applied.min_price ? 1 : 0) +
-    (applied.max_price ? 1 : 0) +
-    (applied.promo ? 1 : 0) +
-    (applied.utilities_included ? 1 : 0) +
-    (applied.furnished ? 1 : 0) +
-    (applied.available_now ? 1 : 0) +
-    (applied.unit_number ? 1 : 0);
+  const draftCount = countFilters(draft);
+  const appliedCount = countFilters(applied);
 
   return (
     <div className="bg-white rounded-2xl overflow-hidden border border-gray-100">
-      {/* Header */}
-      <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <SlidersHorizontal className="w-3.5 h-3.5 text-brand-navy" />
-          <span className="font-semibold text-brand-navy text-sm">Filters</span>
-          {appliedFilterCount > 0 && (
-            <span className="w-5 h-5 bg-brand-navy text-white text-[10px] rounded-full flex items-center justify-center font-bold">
-              {appliedFilterCount}
-            </span>
+      {/* Header + Apply (on top) */}
+      <div className="px-5 py-4 border-b border-gray-100">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <SlidersHorizontal className="w-3.5 h-3.5 text-brand-navy" />
+            <span className="font-semibold text-brand-navy text-sm">Filters</span>
+            {appliedCount > 0 && (
+              <span className="w-5 h-5 bg-brand-navy text-white text-[10px] rounded-full flex items-center justify-center font-bold">
+                {appliedCount}
+              </span>
+            )}
+          </div>
+          {draftCount > 0 && (
+            <button onClick={clearFilters} className="text-xs text-gray-400 hover:text-brand-navy transition-colors">
+              Clear all
+            </button>
           )}
         </div>
-        {draftFilterCount > 0 && (
-          <button
-            onClick={clearFilters}
-            className="text-xs text-gray-400 hover:text-brand-navy transition-colors"
-          >
-            Clear all
-          </button>
-        )}
+        <button
+          onClick={applyFilters}
+          className="w-full bg-brand-navy text-white font-semibold text-sm py-2.5 rounded-xl hover:bg-brand-blue transition-colors"
+        >
+          Apply Filters
+        </button>
       </div>
 
       {/* Sort */}
@@ -183,44 +145,46 @@ function UnitFilterSidebar({
       </div>
 
       {/* Bedrooms */}
-      <div className="px-5 py-4 border-b border-gray-100">
-        <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-3">Bedrooms</p>
-        <div className="flex flex-wrap gap-2">
-          {[
-            { val: 0, label: "Studio" },
-            { val: 1, label: "1 bd" },
-            { val: 2, label: "2 bd" },
-            { val: 3, label: "3 bd" },
-            { val: 4, label: "4+ bd" },
-          ].map(({ val, label }) => (
-            <FilterPill
-              key={val}
-              active={draft.bedrooms.includes(val)}
-              onClick={() => toggle("bedrooms", val)}
-            >
-              {label}
-            </FilterPill>
-          ))}
+      {options.bedrooms.length > 0 && (
+        <div className="px-5 py-4 border-b border-gray-100">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-3">Bedrooms</p>
+          <div className="flex flex-wrap gap-2">
+            {options.bedrooms.map((n) => (
+              <FilterPill key={n} active={draft.bedrooms.includes(n)} onClick={() => toggleNum("bedrooms", n)}>
+                {bedLabel(n)}
+              </FilterPill>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* Bathrooms */}
+      {options.bathrooms.length > 0 && (
+        <div className="px-5 py-4 border-b border-gray-100">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-3">Bathrooms</p>
+          <div className="flex flex-wrap gap-2">
+            {options.bathrooms.map((n) => (
+              <FilterPill key={n} active={draft.bathrooms.includes(n)} onClick={() => toggleNum("bathrooms", n)}>
+                {bathLabel(n)}
+              </FilterPill>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Price */}
       <div className="px-5 py-4 border-b border-gray-100">
         <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-3">Price / month</p>
         <div className="flex gap-2 items-center">
           <input
-            type="text"
-            inputMode="numeric"
-            placeholder="Min $"
+            type="text" inputMode="numeric" placeholder="Min $"
             value={draft.min_price}
             onChange={(e) => setDraft((f) => ({ ...f, min_price: e.target.value.replace(/\D/g, "") }))}
             className="flex-1 min-w-0 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
           />
           <span className="text-gray-300 text-xs shrink-0">to</span>
           <input
-            type="text"
-            inputMode="numeric"
-            placeholder="Max $"
+            type="text" inputMode="numeric" placeholder="Max $"
             value={draft.max_price}
             onChange={(e) => setDraft((f) => ({ ...f, max_price: e.target.value.replace(/\D/g, "") }))}
             className="flex-1 min-w-0 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
@@ -228,140 +192,23 @@ function UnitFilterSidebar({
         </div>
       </div>
 
+      {/* Dropdown facets */}
+      <div className="px-5 py-4 border-b border-gray-100 space-y-4">
+        <MultiSelect label="Neighbourhood" options={options.neighbourhoods} selected={draft.neighbourhood} onChange={setList("neighbourhood")} />
+        <MultiSelect label="Building Amenities" options={options.amenities} selected={draft.amenities} onChange={setList("amenities")} />
+        <MultiSelect label="Utilities Included" options={options.utilities} selected={draft.utilities} onChange={setList("utilities")} />
+        <MultiSelect label="In-Unit Appliances" options={options.appliances} selected={draft.appliances} onChange={setList("appliances")} />
+        <MultiSelect label="Pets" options={options.pets} selected={draft.pets} onChange={setList("pets")} />
+        <MultiSelect label="Parking" options={options.parking} selected={draft.parking} onChange={setList("parking")} />
+      </div>
+
       {/* Quick toggles */}
-      <div className="px-5 py-4 border-b border-gray-100 space-y-3">
+      <div className="px-5 py-4 space-y-3">
         <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-3">Quick Filters</p>
-        <ToggleRow
-          checked={draft.available_now}
-          onChange={(v) => setDraft((f) => ({ ...f, available_now: v }))}
-          label="Available Now"
-        />
-        <ToggleRow
-          checked={draft.promo}
-          onChange={(v) => setDraft((f) => ({ ...f, promo: v }))}
-          label="Promo Available"
-        />
-        <ToggleRow
-          checked={draft.furnished}
-          onChange={(v) => setDraft((f) => ({ ...f, furnished: v }))}
-          label="Furnished"
-        />
-        <ToggleRow
-          checked={draft.utilities_included}
-          onChange={(v) => setDraft((f) => ({ ...f, utilities_included: v }))}
-          label="Utilities Included"
-        />
-      </div>
-
-      {/* Advanced Filters */}
-      <div className="px-5 py-4 border-b border-gray-100">
-        <button
-          onClick={() => setAdvancedOpen(!advancedOpen)}
-          className="flex items-center justify-between w-full text-[10px] font-semibold uppercase tracking-widest text-gray-400 hover:text-brand-navy transition-colors"
-        >
-          Advanced Filters
-          <ChevronDown
-            className={`w-4 h-4 transition-transform duration-200 ${advancedOpen ? "rotate-180" : ""}`}
-          />
-        </button>
-
-        {advancedOpen && (
-          <div className="mt-4 space-y-5">
-            {/* Parking */}
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-2">Parking</p>
-              <div className="flex flex-wrap gap-2">
-                {[
-                  { val: "included", label: "Included" },
-                  { val: "available", label: "Available" },
-                  { val: "none", label: "Not needed" },
-                ].map(({ val, label }) => (
-                  <FilterPill
-                    key={val}
-                    active={draft.parking.includes(val)}
-                    onClick={() => toggle("parking", val)}
-                  >
-                    {label}
-                  </FilterPill>
-                ))}
-              </div>
-            </div>
-
-            {/* Pets */}
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-2">Pets</p>
-              <div className="flex flex-wrap gap-2">
-                {[
-                  { val: "yes", label: "Pets OK" },
-                  { val: "cats_only", label: "Cats Only" },
-                  { val: "no", label: "No Pets" },
-                ].map(({ val, label }) => (
-                  <FilterPill
-                    key={val}
-                    active={draft.pets.includes(val)}
-                    onClick={() => toggle("pets", val)}
-                  >
-                    {label}
-                  </FilterPill>
-                ))}
-              </div>
-            </div>
-
-            {/* Building Amenities */}
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-2">Building Amenities</p>
-              <div className="flex flex-wrap gap-2">
-                {AMENITIES.map((a) => (
-                  <FilterPill
-                    key={a}
-                    active={draft.amenities.includes(a)}
-                    onClick={() => toggle("amenities", a)}
-                  >
-                    {AMENITY_LABELS[a]}
-                  </FilterPill>
-                ))}
-              </div>
-            </div>
-
-            {/* In-Unit Appliances */}
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-2">In-Unit Appliances</p>
-              <div className="flex flex-wrap gap-2">
-                {APPLIANCES.map((a) => (
-                  <FilterPill
-                    key={a}
-                    active={draft.appliances.includes(a)}
-                    onClick={() => toggle("appliances", a)}
-                  >
-                    {APPLIANCE_LABELS[a]}
-                  </FilterPill>
-                ))}
-              </div>
-            </div>
-
-            {/* Unit number */}
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-2">Unit Number</p>
-              <input
-                type="text"
-                placeholder="Search unit #..."
-                value={draft.unit_number}
-                onChange={(e) => setDraft((f) => ({ ...f, unit_number: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
-              />
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Apply button */}
-      <div className="px-5 py-4">
-        <button
-          onClick={applyFilters}
-          className="w-full bg-brand-navy text-white font-semibold text-sm py-2.5 rounded-xl hover:bg-brand-blue transition-colors"
-        >
-          Apply Filters
-        </button>
+        <ToggleRow checked={draft.available_now} onChange={(v) => setDraft((f) => ({ ...f, available_now: v }))} label="Available Now" />
+        <ToggleRow checked={draft.promo} onChange={(v) => setDraft((f) => ({ ...f, promo: v }))} label="Promo Available" />
+        <ToggleRow checked={draft.furnished} onChange={(v) => setDraft((f) => ({ ...f, furnished: v }))} label="Furnished" />
+        <ToggleRow checked={draft.utilities_included} onChange={(v) => setDraft((f) => ({ ...f, utilities_included: v }))} label="Any Utilities Included" />
       </div>
     </div>
   );
@@ -372,6 +219,7 @@ function PropertiesContent() {
   const router = useRouter();
 
   const [units, setUnits] = useState<Unit[]>([]);
+  const [options, setOptions] = useState<FilterOptions>(EMPTY_OPTIONS);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
@@ -381,6 +229,7 @@ function PropertiesContent() {
 
   const initialFilters: Filters = {
     buildings: searchParams.getAll("building"),
+    neighbourhood: searchParams.getAll("neighbourhood"),
     min_price: searchParams.get("min_price") ?? "",
     max_price: searchParams.get("max_price") ?? "",
     bedrooms: searchParams.getAll("bedrooms").map(Number),
@@ -388,16 +237,23 @@ function PropertiesContent() {
     promo: searchParams.get("promo") === "true",
     parking: searchParams.getAll("parking"),
     utilities_included: searchParams.get("utilities_included") === "true",
+    utilities: searchParams.getAll("utilities"),
     appliances: searchParams.getAll("appliances"),
     amenities: searchParams.getAll("amenities"),
     pets: searchParams.getAll("pets"),
     furnished: searchParams.get("furnished") === "true",
     available_now: searchParams.get("available_now") === "true",
-    unit_number: searchParams.get("unit_number") ?? "",
   };
 
   const [draft, setDraft] = useState<Filters>(initialFilters);
   const [applied, setApplied] = useState<Filters>(initialFilters);
+
+  useEffect(() => {
+    fetch("/api/filter-options?type=units")
+      .then((r) => r.json())
+      .then((d) => d.options && setOptions(d.options))
+      .catch(() => {});
+  }, []);
 
   const fetchUnits = useCallback(async (f: Filters, s: string) => {
     setLoading(true);
@@ -405,6 +261,7 @@ function PropertiesContent() {
     try {
       const params = new URLSearchParams();
       f.buildings.forEach((b) => params.append("building", b));
+      f.neighbourhood.forEach((n) => params.append("neighbourhood", n));
       if (f.min_price) params.set("min_price", f.min_price);
       if (f.max_price) params.set("max_price", f.max_price);
       f.bedrooms.forEach((b) => params.append("bedrooms", String(b)));
@@ -412,6 +269,7 @@ function PropertiesContent() {
       if (f.promo) params.set("promo", "true");
       f.parking.forEach((p) => params.append("parking", p));
       if (f.utilities_included) params.set("utilities_included", "true");
+      f.utilities.forEach((u) => params.append("utilities", u));
       f.amenities.forEach((a) => params.append("amenities", a));
       f.appliances.forEach((a) => params.append("appliances", a));
       f.pets.forEach((p) => params.append("pets", p));
@@ -423,11 +281,6 @@ function PropertiesContent() {
       const data = await res.json();
 
       let results: Unit[] = data.units ?? [];
-      if (f.unit_number) {
-        results = results.filter((u) =>
-          u.unit_number.toLowerCase().includes(f.unit_number.toLowerCase())
-        );
-      }
       if (s === "price_asc") results = results.sort((a, b) => a.price - b.price);
       else if (s === "price_desc") results = results.sort((a, b) => b.price - a.price);
 
@@ -443,18 +296,20 @@ function PropertiesContent() {
     fetchUnits(applied, sort);
     const params = new URLSearchParams();
     applied.buildings.forEach((b) => params.append("building", b));
+    applied.neighbourhood.forEach((n) => params.append("neighbourhood", n));
     if (applied.min_price) params.set("min_price", applied.min_price);
     if (applied.max_price) params.set("max_price", applied.max_price);
     applied.bedrooms.forEach((b) => params.append("bedrooms", String(b)));
+    applied.bathrooms.forEach((b) => params.append("bathrooms", String(b)));
     if (applied.promo) params.set("promo", "true");
     applied.parking.forEach((p) => params.append("parking", p));
     if (applied.utilities_included) params.set("utilities_included", "true");
+    applied.utilities.forEach((u) => params.append("utilities", u));
     applied.amenities.forEach((a) => params.append("amenities", a));
     applied.appliances.forEach((a) => params.append("appliances", a));
     applied.pets.forEach((p) => params.append("pets", p));
     if (applied.furnished) params.set("furnished", "true");
     if (applied.available_now) params.set("available_now", "true");
-    if (applied.unit_number) params.set("unit_number", applied.unit_number);
     router.replace(`/properties${params.toString() ? `?${params.toString()}` : ""}`, { scroll: false });
   }, [applied, sort, fetchUnits, router]);
 
@@ -468,22 +323,8 @@ function PropertiesContent() {
     setApplied(EMPTY_FILTERS);
   }
 
-  const appliedFilterCount =
-    applied.buildings.length +
-    applied.bedrooms.length +
-    applied.parking.length +
-    applied.pets.length +
-    applied.amenities.length +
-    applied.appliances.length +
-    (applied.min_price ? 1 : 0) +
-    (applied.max_price ? 1 : 0) +
-    (applied.promo ? 1 : 0) +
-    (applied.utilities_included ? 1 : 0) +
-    (applied.furnished ? 1 : 0) +
-    (applied.available_now ? 1 : 0) +
-    (applied.unit_number ? 1 : 0);
-
-  const sidebarProps = { draft, setDraft, applied, sort, setSort, clearFilters, applyFilters };
+  const appliedFilterCount = countFilters(applied);
+  const sidebarProps = { draft, setDraft, applied, sort, setSort, clearFilters, applyFilters, options };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -513,10 +354,9 @@ function PropertiesContent() {
 
       <div className="max-w-[1300px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <div className="flex gap-6">
-
           {/* Desktop sidebar */}
           <aside className="hidden lg:block w-[260px] shrink-0">
-            <div className="sticky top-[80px]">
+            <div className="sticky top-[80px] max-h-[calc(100vh-100px)] overflow-y-auto">
               <UnitFilterSidebar {...sidebarProps} />
             </div>
           </aside>
@@ -524,10 +364,7 @@ function PropertiesContent() {
           {/* Mobile sidebar overlay */}
           {mobileSidebarOpen && (
             <div className="lg:hidden fixed inset-0 z-50 flex">
-              <div
-                className="absolute inset-0 bg-black/40"
-                onClick={() => setMobileSidebarOpen(false)}
-              />
+              <div className="absolute inset-0 bg-black/40" onClick={() => setMobileSidebarOpen(false)} />
               <div className="relative w-80 max-w-full bg-gray-50 h-full overflow-y-auto p-4">
                 <div className="flex items-center justify-between mb-4">
                   <span className="font-semibold text-brand-navy">Filters</span>
@@ -574,13 +411,10 @@ function PropertiesContent() {
               </div>
             )}
           </main>
-
         </div>
       </div>
 
-      {bookingUnit && (
-        <BookVisitModal unit={bookingUnit} onClose={() => setBookingUnit(null)} />
-      )}
+      {bookingUnit && <BookVisitModal unit={bookingUnit} onClose={() => setBookingUnit(null)} />}
       {detailUnit && (
         <UnitDetailModal
           unit={detailUnit}

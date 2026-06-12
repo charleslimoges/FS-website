@@ -15,12 +15,24 @@ export async function GET(req: NextRequest) {
       ? Number(searchParams.get("max_price"))
       : undefined;
     const amenities = searchParams.getAll("amenities");
+    const utilities = searchParams.getAll("utilities");
+    const appliances = searchParams.getAll("appliances");
+    const pets = searchParams.getAll("pets");
+    const parking = searchParams.getAll("parking");
+    const bedrooms = searchParams.getAll("bedrooms").map(Number);
+    const bathrooms = searchParams.getAll("bathrooms").map(Number);
 
     const buildings = await getPublishedBuildings({
       neighbourhood: neighbourhood.length ? neighbourhood : undefined,
       min_price,
       max_price,
       amenities: amenities.length ? amenities : undefined,
+      utilities: utilities.length ? utilities : undefined,
+      appliances: appliances.length ? appliances : undefined,
+      pets: pets.length ? pets : undefined,
+      parking: parking.length ? parking : undefined,
+      bedrooms: bedrooms.length ? bedrooms : undefined,
+      bathrooms: bathrooms.length ? bathrooms : undefined,
     });
 
     return NextResponse.json({ buildings });
