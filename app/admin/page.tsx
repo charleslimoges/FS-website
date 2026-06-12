@@ -8,8 +8,6 @@ import {
 } from "lucide-react";
 import Button from "@/components/ui/Button";
 
-const ADMIN_PASSWORD = process.env.NEXT_PUBLIC_ADMIN_PASSWORD ?? "admin2024";
-
 // ─── Shared types (admin-facing) ──────────────────────────────────────────────
 
 interface MediaItem {
@@ -235,10 +233,19 @@ export default function AdminPage() {
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState("");
 
-  function handleLogin(e: React.FormEvent) {
+  async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
-    if (password === ADMIN_PASSWORD) setAuthenticated(true);
-    else setPasswordError("Incorrect password. Please try again.");
+    try {
+      const res = await fetch("/api/admin/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
+      });
+      if (res.ok) setAuthenticated(true);
+      else setPasswordError("Incorrect password. Please try again.");
+    } catch {
+      setPasswordError("Something went wrong. Please try again.");
+    }
   }
 
   async function handleSyncNow() {

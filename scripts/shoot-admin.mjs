@@ -10,7 +10,7 @@ const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
 try {
   await page.goto(`${base}/admin`, { waitUntil: "domcontentloaded" });
-  await page.fill('input[type="password"]', "admin2024");
+  await page.fill('input[type="password"]', process.env.ADMIN_PASSWORD ?? "firststays2026");
   await page.click('button:has-text("Unlock")');
   await page.waitForSelector('text=Browse Airtable', { timeout: 8000 });
   await page.waitForTimeout(1000);
