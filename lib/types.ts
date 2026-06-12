@@ -72,6 +72,7 @@ export interface BookVisitData {
 }
 
 export interface UnitFilters {
+  building_id?: string;
   buildings?: string[];
   min_price?: number;
   max_price?: number;

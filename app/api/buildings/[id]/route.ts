@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getBuildingById } from "@/lib/airtable";
+import { getPublishedBuildingById } from "@/lib/supabase/data";
+
+export const dynamic = "force-dynamic";
 
 export async function GET(
   _req: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
-    const building = await getBuildingById(params.id);
+    const building = await getPublishedBuildingById(params.id);
     if (!building) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }

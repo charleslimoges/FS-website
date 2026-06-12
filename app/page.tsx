@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { unsplashUrl, HERO_PHOTO, CTA_PHOTO } from "@/lib/unsplash";
+import { unsplashUrl, HERO_PHOTO } from "@/lib/unsplash";
 import ScrollRevealImage from "@/components/ui/ScrollRevealImage";
 
 export default async function HomePage() {

@@ -397,12 +397,36 @@ export async function searchBuildingsByQuery(
   }));
 }
 
+// Admin browse rule (matches the public-site rule in lib/supabase/data.ts):
+//  - Apartment Status is Vacant, Occupied, Partner Application, or Future
+//  - Application Status is NOT "Signed"
+//  - Active is "Active"
+// Checked on the raw Airtable fields before mapping, since mapUnit collapses
+// Occupied and Rented into the same value.
+function isEligibleUnit(record: AirtableRecord): boolean {
+  const apt = selectName(record.fields["Apartment Status"]).toLowerCase();
+  const okApt =
+    apt.includes("vacant") ||
+    apt.includes("occupied") ||
+    apt.includes("partner application") ||
+    apt.includes("future");
+  const notSigned = !selectNames(record.fields["Application Status - All"]).some(
+    (s) => s.toLowerCase().includes("signed")
+  );
+  // "Active" is a multipleLookupValues field → comes back as ["Active"], so use
+  // selectNames (array-aware), not selectName.
+  const isActive = selectNames(record.fields["Active"]).some(
+    (s) => s.trim().toLowerCase() === "active"
+  );
+  return okApt && notSigned && isActive;
+}
+
 export async function getUnitsByBuilding(buildingId: string): Promise<Unit[]> {
   const name = await getBuildingName(buildingId);
   if (!name) return [];
   const formula = `FIND("${name}", ARRAYJOIN({Building}, ","))`;
   const records = await fetchAllRecords(UNITS_TABLE, formula);
-  return records.map(mapUnit);
+  return records.filter(isEligibleUnit).map(mapUnit);
 }
 
 export async function logContactForm(data: {

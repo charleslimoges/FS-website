@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getUnits } from "@/lib/airtable";
+import { getPublishedUnits } from "@/lib/supabase/data";
 
 export const dynamic = "force-dynamic";
 
@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
     const available_now =
       searchParams.get("available_now") === "true" ? true : undefined;
 
-    const units = await getUnits({
+    const units = await getPublishedUnits({
       building_id,
       buildings: buildings.length ? buildings : undefined,
       min_price,

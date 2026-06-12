@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getBuildings } from "@/lib/airtable";
+import { getPublishedBuildings } from "@/lib/supabase/data";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
       : undefined;
     const amenities = searchParams.getAll("amenities");
 
-    const buildings = await getBuildings({
+    const buildings = await getPublishedBuildings({
       neighbourhood: neighbourhood.length ? neighbourhood : undefined,
       min_price,
       max_price,

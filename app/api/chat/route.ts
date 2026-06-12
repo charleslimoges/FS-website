@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
-import { getUnits } from "@/lib/airtable";
+import { getPublishedUnits } from "@/lib/supabase/data";
 
 const client = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
@@ -92,7 +92,7 @@ export async function POST(req: NextRequest) {
     );
 
     const response = await client.messages.create({
-      model: "claude-sonnet-4-20250514",
+      model: "claude-sonnet-4-6",
       max_tokens: 1024,
       system: SYSTEM_PROMPT,
       messages: anthropicMessages,
@@ -125,7 +125,7 @@ export async function POST(req: NextRequest) {
     if (searchMatch) {
       try {
         const searchParams: SearchParams = JSON.parse(searchMatch[1]);
-        const fetchedUnits = await getUnits({
+        const fetchedUnits = await getPublishedUnits({
           min_price: searchParams.min_price,
           max_price: searchParams.max_price,
           bedrooms: searchParams.bedrooms,
